@@ -1,0 +1,19 @@
+{
+  "watch": ["index.js", "src/"],
+  "ignore": [
+    "node_modules/",
+    "sessions/",
+    "logs/",
+    "database/",
+    "backups/",
+    "*.db",
+    "*.log",
+    ".env",
+    "package*.json"
+  ],
+  "ext": "js,json",
+  "delay": 1000,
+  "env": {
+    "NODE_ENV": "development"
+  }
+}
