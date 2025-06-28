@@ -9,12 +9,17 @@
     "pm2": "pm2 start index.js --name simple-financial-bot"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.5.0",
+    "@whiskeysockets/baileys": "^6.6.0",
+    "canvas": "^3.1.2",
+    "chart.js": "^4.5.0",
+    "chartjs-node-canvas": "^5.0.0",
     "dotenv": "^17.0.0",
     "moment": "^2.29.4",
     "pm2": "^6.0.8",
     "qrcode-terminal": "^0.12.0",
-    "sqlite3": "^5.1.6"
+    "sharp": "^0.32.6",
+    "sqlite3": "^5.1.6",
+    "axios": "^1.6.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
