@@ -3,3 +3,5 @@ node_modules
 sessions
 financial.db
 charts
+upgrade
+*.log
