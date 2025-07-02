@@ -1,5 +1,6 @@
 const { logger } = require('../config');
 const { getDB } = require('../database');
+const { getUserPrimaryRole } = require('./roleService');
 
 // Check if user is whitelisted
 function isWhitelisted(phone) {
@@ -18,36 +19,76 @@ function isWhitelisted(phone) {
   });
 }
 
-// Get or create user
-function getUser(phone) {
-  return new Promise((resolve) => {
+// Update getUser function
+async function getUser(phone) {
+  return new Promise(async (resolve) => {
     const db = getDB();
-    db.get('SELECT * FROM users WHERE phone = ?', [phone], (err, row) => {
+    
+    db.get('SELECT * FROM users WHERE phone = ?', [phone], async (err, row) => {
       if (err) {
         logger.error('Error getting user', { phone, error: err.message });
         resolve(null);
-        return;
-      }
-      
-      if (row) {
-        logger.debug('User found', { userId: row.id, phone: phone.split('@')[0] });
-        resolve(row);
-      } else {
-        // Create new user
-        const userName = phone.split('@')[0];
-        db.run('INSERT INTO users (phone, name) VALUES (?, ?)', [phone, userName], function(err) {
-          if (err) {
-            logger.error('Error creating user', { phone, error: err.message });
-            resolve(null);
-          } else {
-            const newUser = { id: this.lastID, phone, name: userName };
-            logger.info('New user created', { userId: newUser.id, phone: phone.split('@')[0] });
-            resolve(newUser);
-          }
+      } else if (row) {
+        // Get user's primary role
+        const primaryRole = await getUserPrimaryRole(row.id);
+        
+        resolve({
+          ...row,
+          role: primaryRole
         });
+      } else {
+        // Create new user (without role assignment)
+        db.run(
+          'INSERT INTO users (phone, created_at) VALUES (?, ?)',
+          [phone, new Date().toISOString()],
+          async function(err) {
+            if (err) {
+              logger.error('Error creating user', { phone, error: err.message });
+              resolve(null);
+            } else {
+              logger.info('New user created without role', { 
+                userId: this.lastID, 
+                phone
+              });
+              
+              fileLogger.info('user_created', {
+                id: this.lastID,
+                phone,
+                timestamp: new Date().toISOString()
+              });
+              
+              resolve({
+                id: this.lastID,
+                phone,
+                role: null, // No role assigned yet
+                created_at: new Date().toISOString()
+              });
+            }
+          }
+        );
       }
     });
   });
+}
+
+// Check if user is authorized (has any active role)
+async function isAuthorized(phone) {
+  const user = await getUser(phone);
+  return user && user.role !== null;
+}
+
+// Get user by phone with full role info
+async function getUserWithRoles(phone) {
+  const user = await getUser(phone);
+  if (!user) return null;
+  
+  const { getUserRoles } = require('./roleService');
+  const roles = await getUserRoles(user.id);
+  
+  return {
+    ...user,
+    roles: roles
+  };
 }
 
 // Add user to whitelist
@@ -102,6 +143,8 @@ function getWhitelist() {
 module.exports = {
   isWhitelisted,
   getUser,
+  isAuthorized,
+  getUserWithRoles,
   addToWhitelist,
   removeFromWhitelist,
   getWhitelist
