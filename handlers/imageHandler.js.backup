@@ -1,0 +1,110 @@
+const fs = require('fs').promises;
+const path = require('path');
+const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+const { logger } = require('../config');
+const ocrService = require('../services/ocrService');
+const { parseTransaction, addTransaction } = require('../services/transactionService');
+const { formatCurrency } = require('../utils/formatter');
+const { messageStats } = require('../utils/messageStats');
+
+async function handleImageMessage(sock, msg, userNumber) {
+  try {
+    const imageMessage = msg.message.imageMessage;
+    if (!imageMessage) return;
+
+    logger.info('Processing image message', { userNumber });
+
+    // Download image
+    const buffer = await downloadMediaMessage(msg, 'buffer', {});
+    if (!buffer) {
+      await sock.sendMessage(msg.key.remoteJid, {
+        text: '❌ Gagal mengunduh gambar. Coba kirim ulang.'
+      });
+      return;
+    }
+
+    // Save image temporarily
+    const tempDir = './temp';
+    await fs.mkdir(tempDir, { recursive: true });
+    const imagePath = path.join(tempDir, `image_${Date.now()}.jpg`);
+    await fs.writeFile(imagePath, buffer);
+
+    // Send processing message
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: '🔍 Sedang memproses gambar dengan OCR...\n⏳ Tunggu sebentar ya!'
+    });
+
+    // Process with OCR
+    const ocrResult = await ocrService.processFinancialImage(imagePath);
+    
+    // Clean up temp file
+    try {
+      await fs.unlink(imagePath);
+    } catch (error) {
+      logger.warn('Error deleting temp image', { error: error.message });
+    }
+
+    // Send OCR result
+    let responseText = `📸 *HASIL OCR*\n\n`;
+    responseText += `🎯 Akurasi: ${ocrResult.confidence}%\n`;
+    
+    if (ocrResult.warning) {
+      responseText += `⚠️ ${ocrResult.warning}\n`;
+    }
+    
+    responseText += `\n📝 *Teks yang ditemukan:*\n${ocrResult.text.substring(0, 500)}`;
+    
+    if (ocrResult.text.length > 500) {
+      responseText += '...\n_(teks dipotong karena terlalu panjang)_';
+    }
+
+    // Check for possible transactions
+    if (ocrResult.possibleTransactions && ocrResult.possibleTransactions.length > 0) {
+      responseText += `\n\n💰 *Transaksi yang terdeteksi:*\n`;
+      
+      for (let i = 0; i < Math.min(ocrResult.possibleTransactions.length, 3); i++) {
+        const transaction = ocrResult.possibleTransactions[i];
+        responseText += `${i + 1}. ${transaction.text}\n`;
+        responseText += `   💵 ${transaction.amount} (${transaction.context})\n`;
+      }
+      
+      responseText += `\n💡 *Tip:* Ketik ulang dalam format yang benar untuk menyimpan transaksi.\n`;
+      responseText += `Contoh: "bayar 50rb untuk makan" atau "terima gaji 5jt"`;
+    } else {
+      responseText += `\n\n💡 *Tip:* Tidak ditemukan transaksi yang jelas. Anda bisa ketik manual dalam format:\n`;
+      responseText += `"bayar [jumlah] untuk [keterangan]" atau "terima [jumlah] dari [sumber]"`;
+    }
+
+    await sock.sendMessage(msg.key.remoteJid, { text: responseText });
+
+    // Update stats
+    messageStats.processed++;
+    messageStats.ocrProcessed = (messageStats.ocrProcessed || 0) + 1;
+
+    logger.info('Image OCR processing completed', { 
+      userNumber, 
+      confidence: ocrResult.confidence,
+      transactionsFound: ocrResult.possibleTransactions?.length || 0
+    });
+
+  } catch (error) {
+    logger.error('Error handling image message', { 
+      userNumber, 
+      error: error.message,
+      stack: error.stack
+    });
+
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: '❌ Terjadi kesalahan saat memproses gambar.\n\n' +
+            '🔧 Pastikan:\n' +
+            '• Gambar jelas dan tidak blur\n' +
+            '• Teks dapat dibaca dengan mudah\n' +
+            '• Ukuran file tidak terlalu besar\n\n' +
+            '💡 Coba kirim ulang atau ketik transaksi manual.'
+    });
+  }
+}
+
+module.exports = {
+  handleImageMessage
+};

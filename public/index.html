@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial Bot Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .summary-card {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            color: white;
+        }
+
+        .income-card {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: white;
+        }
+
+        .expense-card {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            color: #333;
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .card-subtitle {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .action-btn {
+            background: white;
+            border: none;
+            border-radius: 12px;
+            padding: 20px 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            text-decoration: none;
+            color: #333;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .action-btn .icon {
+            font-size: 2rem;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .action-btn .label {
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .transaction-form {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .submit-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.3s ease;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .transactions-list {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .transaction-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .transaction-item:last-child {
+            border-bottom: none;
+        }
+
+        .transaction-info {
+            flex: 1;
+        }
+
+        .transaction-description {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .transaction-meta {
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .transaction-amount {
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .amount-income {
+            color: #10b981;
+        }
+
+        .amount-expense {
+            color: #ef4444;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-placeholder {
+            height: 300px;
+            background: linear-gradient(135deg, #f6f9fc 0%, #e9ecef 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .tabs {
+            display: flex;
+            background: white;
+            border-radius: 12px;
+            padding: 5px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .tab {
+            flex: 1;
+            background: none;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .whatsapp-info {
+            background: linear-gradient(135deg, #25d366 0%, #128c7e 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .whatsapp-info h3 {
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+        }
+
+        .whatsapp-number {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px 20px;
+            border-radius: 8px;
+            display: inline-block;
+            margin: 10px 0;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .feature-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .card {
+                padding: 20px;
+            }
+
+            .card-value {
+                font-size: 1.5rem;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .quick-actions {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .action-btn {
+                padding: 15px 10px;
+            }
+
+            .action-btn .icon {
+                font-size: 1.5rem;
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+
+            .quick-actions {
+                grid-template-columns: 1fr;
+            }
+
+            .tabs {
+                flex-direction: column;
+            }
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.error {
+            background: #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💰 Financial Bot Dashboard</h1>
+            <p>Kelola keuangan Anda dengan mudah melalui WhatsApp</p>
+        </div>
+
+        <div class="whatsapp-info">
+            <h3>🤖 Connect via WhatsApp</h3>
+            <p>Kirim pesan ke nomor bot untuk mulai mencatat transaksi</p>
+            <div class="whatsapp-number">+62 XXX XXXX XXXX</div>
+            <p style="margin-top: 10px;">Ketik "/menu" untuk akses cepat atau "/help" untuk bantuan</p>
+            
+            <div class="features-grid">
+                <div class="feature-item">
+                    <div>📝 Auto Parse</div>
+                    <small>Deteksi otomatis jenis transaksi</small>
+                </div>
+                <div class="feature-item">
+                    <div>📊 Real-time Charts</div>
+                    <small>Grafik keuangan instan</small>
+                </div>
+                <div class="feature-item">
+                    <div>⚡ Quick Commands</div>
+                    <small>Shortcut untuk transaksi cepat</small>
+                </div>
+                <div class="feature-item">
+                    <div>🔒 Secure & Private</div>
+                    <small>Data aman dengan whitelist</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('dashboard')">📊 Dashboard</button>
+            <button class="tab" onclick="switchTab('transactions')">💳 Transaksi</button>
+            <button class="tab" onclick="switchTab('reports')">📈 Laporan</button>
+            <button class="tab" onclick="switchTab('help')">❓ Bantuan</button>
+        </div>
+
+        <div id="dashboard" class="tab-content active">
+            <div class="dashboard">
+                <div class="card summary-card">
+                    <div class="card-title">
+                        <span>💰</span>
+                        <span>Saldo Bulan Ini</span>
+                    </div>
+                    <div class="card-value" id="totalBalance">Rp 0</div>
+                    <div class="card-subtitle">Net income - expenses</div>
+                </div>
+
+                <div class="card income-card">
+                    <div class="card-title">
+                        <span>📈</span>
+                        <span>Total Pemasukan</span>
+                    </div>
+                    <div class="card-value" id="totalIncome">Rp 0</div>
+                    <div class="card-subtitle">Bulan ini</div>
+                </div>
+
+                <div class="card expense-card">
+                    <div class="card-title">
+                        <span>📉</span>
+                        <span>Total Pengeluaran</span>
+                    </div>
+                    <div class="card-value" id="totalExpense">Rp 0</div>
+                    <div class="card-subtitle">Bulan ini</div>
+                </div>
+            </div>
+
+            <div class="quick-actions">
+                <button class="action-btn" onclick="quickTransaction('makan')">
+                    <span class="icon">🍽️</span>
+                    <span class="label">Makan</span>
+                </button>
+                <button class="action-btn" onclick="quickTransaction('transport')">
+                    <span class="icon">🚗</span>
+                    <span class="label">Transport</span>
+                </button>
+                <button class="action-btn" onclick="quickTransaction('belanja')">
+                    <span class="icon">🛒</span>
+                    <span class="label">Belanja</span>
+                </button>
+                <button class="action-btn" onclick="quickTransaction('gaji')">
+                    <span class="icon">💰</span>
+                    <span class="label">Gaji</span>
+                </button>
+                <button class="action-btn" onclick="showChart('line')">
+                    <span class="icon">📈</span>
+                    <span class="label">Trend Chart</span>
+                </button>
+                <button class="action-btn" onclick="showChart('pie')">
+                    <span class="icon">🥧</span>
+                    <span class="label">Pie Chart</span>
+                </button>
+            </div>
+
+            <div class="chart-container">
+                <h3 style="margin-bottom: 20px;">📊 Visualisasi Keuangan</h3>
+                <div class="chart-placeholder" id="chartContainer">
+                    <div>📈 Chart akan ditampilkan di sini</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="transactions" class="tab-content">
+            <div class="transaction-form">
+                <h3 style="margin-bottom: 20px;">➕ Tambah Transaksi Baru</h3>
+                <form onsubmit="addTransaction(event)">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Jenis Transaksi</label>
+                            <select id="transactionType" required>
+                                <option value="expense">💸 Pengeluaran</option>
+                                <option value="income">💰 Pemasukan</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Jumlah</label>
+                            <input type="number" id="amount" placeholder="25000" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Kategori</label>
+                            <select id="category" required>
+                                <option value="Makan">🍽️ Makan</option>
+                                <option value="Transport">🚗 Transport</option>
+                                <option value="Belanja">🛒 Belanja</option>
+                                <option value="Tagihan">📄 Tagihan</option>
+                                <option value="Gaji">💰 Gaji</option>
+                                <option value="Bonus">🎁 Bonus</option>
+                                <option value="Lainnya">📂 Lainnya</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Tanggal</label>
+                            <input type="date" id="date" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Deskripsi</label>
+                        <textarea id="description" placeholder="Bayar makan siang..." rows="3"></textarea>
+                    </div>
+                    <button type="submit" class="submit-btn">
+                        <span id="submitText">Tambah Transaksi</span>
+                        <span id="submitLoading" class="loading" style="display: none;"></span>
+                    </button>
+                </form>
+            </div>
+
+            <div class="transactions-list">
+                <h3 style="margin-bottom: 20px;">📋 Transaksi Terbaru</h3>
+                <div id="transactionsList">
+                    <!-- Transactions will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <div id="reports" class="tab-content">
+            <div class="dashboard">
+                <div class="card">
+                    <div class="card-title">
+                        <span>📊</span>
+                        <span>Laporan Harian</span>
+                    </div>
+                    <p>Lihat transaksi hari ini dan saldo terkini</p>
+                    <button class="submit-btn" onclick="generateReport('daily')" style="margin-top: 15px;">
+                        Generate Laporan Harian
+                    </button>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">
+                        <span>📈</span>
+                        <span>Laporan Bulanan</span>
+                    </div>
+                    <p>Ringkasan lengkap transaksi bulan ini</p>
+                    <button class="submit-btn" onclick="generateReport('monthly')" style="margin-top: 15px;">
+                        Generate Laporan Bulanan
+                    </button>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">
+                        <span>🥧</span>
+                        <span>Breakdown Kategori</span>
+                    </div>
+                    <p>Analisis pengeluaran per kategori</p>
+                    <button class="submit-btn" onclick="generateReport('category')" style="margin-top: 15px;">
+                        Generate Breakdown
+                    </button>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h3 style="margin-bottom: 20px;">📈 Chart Perbandingan 3 Bulan</h3>
+                <div class="chart-placeholder">
+                    <div>📊 Bar chart perbandingan 3 bulan terakhir</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="help" class="tab-content">
+            <div class="card">
+                <div class="card-title">
+                    <span>💬</span>
+                    <span>Command WhatsApp</span>
+                </div>
+                
+                <h4 style="margin: 20px 0 10px 0;">📝 Input Transaksi:</h4>
+                <ul style="margin-left: 20px; margin-bottom: 20px;">
+                    <li><strong>Pengeluaran:</strong> "bayar makan 25000", "beli bensin 50rb"</li>
+                    <li><strong>Pemasukan:</strong> "terima gaji 5jt", "dapat bonus 1000000"</li>
+                </ul>
+
+                <h4 style="margin: 20px 0 10px 0;">⚡ Shortcut Commands:</h4>
+                <ul style="margin-left: 20px; margin-bottom: 20px;">
+                    <li><code>m 25000</code> - Input makan cepat</li>
+                    <li><code>t 15000</code> - Input transport cepat</li>
+                    <li><code>g 5jt</code> - Input gaji cepat</li>
+                </ul>
+
+                <h4 style="margin: 20px 0 10px 0;">📊 Commands Laporan:</h4>
+                <ul style="margin-left: 20px; margin-bottom: 20px;">
+                    <li><code>/saldo</code> - Cek saldo hari ini</li>
+                    <li><code>/bulan</code> - Laporan bulanan</li>
+                    <li><code>/kategori</code> - Ringkasan kategori</li>
+                </ul>
+
+                <h4 style="margin: 20px 0 10px 0;">📈 Commands Chart:</h4>
+                <ul style="margin-left: 20px; margin-bottom: 20px;">
+                    <li><code>/chart</code> - Grafik trend harian</li>
+                    <li><code>/pie</code> - Breakdown kategori</li>
+                    <li><code>/compare</code> - Perbandingan 3 bulan</li>
+                </ul>
+
+                <h4 style="margin: 20px 0 10px 0;">🚀 Menu Cepat:</h4>
+                <p style="margin-left: 20px;">Ketik <code>/menu</code> lalu angka 0-9 untuk akses cepat fitur bot.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script>
+        // Sample data for demo
+        let sampleData = {
+            transactions: [
+                { id: 1, type: 'expense', amount: 25000, category: 'Makan', description: 'Makan siang warung', date: '2024-01-15' },
+                { id: 2, type: 'expense', amount: 15000, category: 'Transport', description: 'Ojek online', date: '2024-01-15' },
+                { id: 3, type: 'income', amount: 5000000, category: 'Gaji', description: 'Gaji bulanan', date: '2024-01-01' },
+                { id: 4, type: 'expense', amount: 150000, category: 'Belanja', description: 'Belanja bulanan', date: '2024-01-14' },
+                { id: 5, type: 'expense', amount: 50000, category: 'Tagihan', description: 'Bayar listrik', date: '2024-01-13' }
+            ]
+        };
+
+        // Format currency
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('id-ID', {
+                style: 'currency',
+                currency: 'IDR',
+                minimumFractionDigits: 0
+            }).format(amount);
+        }
+
+        // Switch tabs
+        function switchTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+            
+            if (tabName === 'dashboard') {
+                updateDashboard();
+            } else if (tabName === 'transactions') {
+                loadTransactions();
+            }
+        }
+
+        // Update dashboard with calculated values
+        function updateDashboard() {
+            const currentMonth = new Date().getMonth();
+            const currentYear = new Date().getFullYear();
+            
+            const monthlyTransactions = sampleData.transactions.filter(t => {
+                const transactionDate = new Date(t.date);
+                return transactionDate.getMonth() === currentMonth && 
+                       transactionDate.getFullYear() === currentYear;
+            });
+            
+            const totalIncome = monthlyTransactions
+                .filter(t => t.type === 'income')
+                .reduce((sum, t) => sum + t.amount, 0);
+            
+            const totalExpense = monthlyTransactions
+                .filter(t => t.type === 'expense')
+                .reduce((sum, t) => sum + t.amount, 0);
+            
+            const balance = totalIncome - totalExpense;
+            
+            document.getElementById('totalIncome').textContent = formatCurrency(totalIncome);
+            document.getElementById('totalExpense').textContent = formatCurrency(totalExpense);
+            document.getElementById('totalBalance').textContent = formatCurrency(balance);
+        }
+
+        // Load transactions list
+        function loadTransactions() {
+            const container = document.getElementById('transactionsList');
+            const recentTransactions = sampleData.transactions
+                .sort((a, b) => new Date(b.date) - new Date(a.date))
+                .slice(0, 10);
+            
+            container.innerHTML = recentTransactions.map(t => `
+                <div class="transaction-item">
+                    <div class="transaction-info">
+                        <div class="transaction-description">${t.description}</div>
+                        <div class="transaction-meta">
+                            ${t.category} • ${new Date(t.date).toLocaleDateString('id-ID')} • #${t.id}
+                        </div>
+                    </div>
+                    <div class="transaction-amount ${t.type === 'income' ? 'amount-income' : 'amount-expense'}">
+                        ${t.type === 'income' ? '+' : '-'}${formatCurrency(t.amount)}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Add new transaction
+        function addTransaction(event) {
+            event.preventDefault();
+            
+            const submitBtn = event.target.querySelector('button[type="submit"]');
+            const submitText = document.getElementById('submitText');
+            const submitLoading = document.getElementById('submitLoading');
+            
+            // Show loading
+            submitText.style.display = 'none';
+            submitLoading.style.display = 'inline-block';
+            submitBtn.disabled = true;
+            
+            // Get form data
+            const formData = {
+                id: Date.now(),
+                type: document.getElementById('transactionType').value,
+                amount: parseInt(document.getElementById('amount').value),
+                category: document.getElementById('category').value,
+                description: document.getElementById('description').value || 'Transaksi manual',
+                date: document.getElementById('date').value
+            };
+            
+            // Simulate API call
+            setTimeout(() => {
+                // Add to sample data
+                sampleData.transactions.push(formData);
+                
+                // Reset form
+                event.target.reset();
+                document.getElementById('date').value = new Date().toISOString().split('T')[0];
+                
+                // Show success notification
+                showNotification('✅ Transaksi berhasil ditambahkan!', 'success');
+                
+                // Update dashboard if visible
+                if (document.getElementById('dashboard').classList.contains('active')) {
+                    updateDashboard();
+                }
+                
+                // Reload transactions if visible
+                if (document.getElementById('transactions').classList.contains('active')) {
+                    loadTransactions();
+                }
+                
+                // Hide loading
+                submitText.style.display = 'inline';
+                submitLoading.style.display = 'none';
+                submitBtn.disabled = false;
+                
+            }, 1000);
+        }
+
+        // Quick transaction
+        function quickTransaction(type) {
+            const amount = prompt(`Masukkan jumlah untuk ${type}:`);
+            if (!amount || isNaN(amount)) {
+                showNotification('❌ Jumlah tidak valid', 'error');
+                return;
+            }
+            
+            const transaction = {
+                id: Date.now(),
+                type: type === 'gaji' ? 'income' : 'expense',
+                amount: parseInt(amount),
+                category: type === 'makan' ? 'Makan' : 
+                         type === 'transport' ? 'Transport' :
+                         type === 'belanja' ? 'Belanja' : 'Gaji',
+                description: `${type} cepat`,
+                date: new Date().toISOString().split('T')[0]
+            };
+            
+            sampleData.transactions.push(transaction);
+            updateDashboard();
+            showNotification(`✅ Transaksi ${type} berhasil ditambahkan!`, 'success');
+        }
+
+        // Show chart
+        function showChart(type) {
+            const chartContainer = document.getElementById('chartContainer');
+            
+            if (type === 'line') {
+                chartContainer.innerHTML = `
+                    <div style="text-align: center; padding: 60px 20px;">
+                        <h3 style="color: #667eea; margin-bottom: 20px;">📈 Trend Keuangan Harian</h3>
+                        <p style="color: #666; margin-bottom: 30px;">Grafik menampilkan pergerakan pemasukan dan pengeluaran</p>
+                        <div style="background: linear-gradient(to right, #10b981, #ef4444); height: 4px; border-radius: 2px; margin: 20px 0;"></div>
+                        <p style="color: #888; font-size: 0.9rem;">💰 Pemasukan: ${formatCurrency(5000000)} | 💸 Pengeluaran: ${formatCurrency(240000)}</p>
+                    </div>
+                `;
+            } else if (type === 'pie') {
+                chartContainer.innerHTML = `
+                    <div style="text-align: center; padding: 60px 20px;">
+                        <h3 style="color: #667eea; margin-bottom: 20px;">🥧 Breakdown Pengeluaran</h3>
+                        <div style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin: 30px 0;">
+                            <div style="background: #ef4444; color: white; padding: 10px 15px; border-radius: 8px; font-size: 0.9rem;">Makan: 40%</div>
+                            <div style="background: #f97316; color: white; padding: 10px 15px; border-radius: 8px; font-size: 0.9rem;">Transport: 25%</div>
+                            <div style="background: #10b981; color: white; padding: 10px 15px; border-radius: 8px; font-size: 0.9rem;">Belanja: 20%</div>
+                            <div style="background: #8b5cf6; color: white; padding: 10px 15px; border-radius: 8px; font-size: 0.9rem;">Tagihan: 15%</div>
+                        </div>
+                        <p style="color: #888; font-size: 0.9rem;">Total Pengeluaran: ${formatCurrency(240000)}</p>
+                    </div>
+                `;
+            }
+            
+            showNotification(`📊 ${type === 'line' ? 'Line' : 'Pie'} chart berhasil dimuat!`, 'success');
+        }
+
+        // Generate report
+        function generateReport(type) {
+            const reports = {
+                daily: 'Laporan harian berhasil dibuat! Total transaksi hari ini: 3',
+                monthly: 'Laporan bulanan berhasil dibuat! Total transaksi bulan ini: 15',
+                category: 'Breakdown kategori berhasil dibuat! Kategori tertinggi: Makan (40%)'
+            };
+            
+            showNotification(`📊 ${reports[type]}`, 'success');
+        }
+
+        // Show notification
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.classList.add('show');
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set today's date as default
+            document.getElementById('date').value = new Date().toISOString().split('T')[0];
+            
+            // Update dashboard
+            updateDashboard();
+            
+            // Load transactions
+            loadTransactions();
+            
+            console.log('🚀 Financial Bot Dashboard initialized');
+            console.log('📱 Ready to connect with WhatsApp bot');
+        });
+    </script>
+</body>
+</html>
