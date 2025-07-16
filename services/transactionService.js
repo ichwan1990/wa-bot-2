@@ -6,20 +6,51 @@ const { getDB } = require('../database');
 function parseTransaction(text) {
   text = text.toLowerCase().trim();
   
-  // Extract amount
+  // Extract amount (support for juta, ribu, ratus, puluh, currency symbols, and "k" for ribu)
   let amount = 0;
-  if (text.includes('jt') || text.includes('juta')) {
-    const match = text.match(/(\d+(?:[,\.]\d+)?)\s*(?:jt|juta)/);
-    if (match) amount = parseFloat(match[1].replace(',', '.')) * 1000000;
-  } else if (text.includes('rb') || text.includes('ribu')) {
-    const match = text.match(/(\d+(?:[,\.]\d+)?)\s*(?:rb|ribu)/);
-    if (match) amount = parseInt(match[1]) * 1000;
-  } else {
-    const match = text.match(/(\d+(?:[,\.]\d+)*)/);
-    if (match) amount = parseInt(match[1].replace(/[,\.]/g, ''));
+  let match = null;
+
+  // Remove currency symbols for easier parsing
+  text = text.replace(/rp\.?|idr|rupiah/gi, '').replace(/\s+/g, ' ');
+
+  // Support for "1,5 juta", "1.5 juta", "1 juta 500 ribu", etc.
+  if ((match = text.match(/(\d+(?:[.,]\d+)?)\s*(jt|juta)/))) {
+    // e.g. "1,5 juta"
+    amount = parseFloat(match[1].replace(',', '.')) * 1000000;
+    // Check for additional "ribu" after "juta"
+    if ((match = text.match(/(\d+(?:[.,]\d+)?)\s*(rb|ribu)/))) {
+      amount += parseFloat(match[1].replace(',', '.')) * 1000;
+    }
+  } else if ((match = text.match(/(\d+(?:[.,]\d+)?)\s*(rb|ribu)/))) {
+    // e.g. "500 ribu"
+    amount = parseFloat(match[1].replace(',', '.')) * 1000;
+  } else if ((match = text.match(/(\d+(?:[.,]\d+)?)\s*(rts|ratus)/))) {
+    // e.g. "3 ratus"
+    amount = parseFloat(match[1].replace(',', '.')) * 100;
+  } else if ((match = text.match(/(\d+(?:[.,]\d+)?)\s*(plh|puluh)/))) {
+    // e.g. "5 puluh"
+    amount = parseFloat(match[1].replace(',', '.')) * 10;
+  } else if ((match = text.match(/(\d+(?:[.,]\d+)?)[ ]?k\b/))) {
+    // e.g. "5k" or "5 k" (means 5000)
+    amount = parseFloat(match[1].replace(',', '.')) * 1000;
+  } else if ((match = text.match(/(\d+(?:[.,]\d+)?)k\b/))) {
+    // e.g. "17,5k" or "17.5k" (means 17500)
+    amount = parseFloat(match[1].replace(',', '.')) * 1000;
+  } else if ((match = text.match(/(\d{1,3}(?:[.,]\d{3})+|\d+)/))) {
+    // e.g. "1.500.000" or "1500000"
+    amount = parseInt(match[1].replace(/[.,]/g, ''));
   }
-  
-  if (amount === 0) return null;
+
+  // If still 0, try to find any number in the text
+  if (amount === 0) {
+    match = text.match(/(\d+(?:[.,]\d+)?)/);
+    if (match) {
+      amount = parseFloat(match[1].replace(',', '.'));
+    }
+  }
+
+  // If still 0, return null (invalid)
+  if (!amount || isNaN(amount) || amount === 0) return null;
   
   // Determine type - PEMASUKAN keywords first!
   let type = 'expense'; // default
@@ -57,20 +88,58 @@ function parseTransaction(text) {
   // Determine category based on type and keywords
   let category = 'Lainnya';
   
+  // Optimized category detection using keyword-category mapping
+  const incomeCategories = [
+    { keywords: ['gaji', 'salary', 'JM'], category: 'Gaji' },
+    { keywords: ['bonus', 'thr'], category: 'Bonus' },
+    { keywords: ['freelance', 'project'], category: 'Freelance' },
+    { keywords: ['komisi', 'fee'], category: 'Komisi' }
+  ];
+  const expenseCategories = [
+    { keywords: ['makan', 'minum', 'restoran', 'sarapan'], category: 'Makan' },
+    { keywords: ['bensin', 'transport', 'ojek', 'grab', 'pertamax', 'pertalite'], category: 'Transport' },
+    { keywords: ['listrik', 'tagihan', 'wifi', 'pulsa'], category: 'Tagihan' },
+    { keywords: ['belanja', 'beli', 'shopping'], category: 'Belanja' },
+    { keywords: ['hutang', 'cicilan', 'angsuran'], category: 'Hutang' },
+    { keywords: ['hiburan', 'nonton', 'liburan', 'kopi', 'jajan'], category: 'Hiburan' },
+    { keywords: ['kesehatan', 'obat', 'dokter'], category: 'Kesehatan' },
+    { keywords: ['donasi', 'amal', 'sumbangan'], category: 'Donasi' },
+    { keywords: ['asuransi', 'premi'], category: 'Asuransi' },
+    { keywords: ['investasi', 'saham', 'reksa dana'], category: 'Investasi' },
+    { keywords: ['perbaikan', 'service', 'repair'], category: 'Perbaikan' },
+    { keywords: ['pajak', 'tax'], category: 'Pajak' },
+    { keywords: ['kartu kredit', 'cc'], category: 'Kartu Kredit' },
+    { keywords: ['sewa', 'rental'], category: 'Sewa' },
+    { keywords: ['pendidikan', 'kursus', 'sekolah'], category: 'Pendidikan' },
+    { keywords: ['perjalanan', 'travel', 'liburan'], category: 'Perjalanan' },
+    { keywords: ['kecantikan', 'perawatan', 'spa'], category: 'Kecantikan' },
+    { keywords: ['perabot', 'furniture', 'home decor'], category: 'Perabot' },
+    { keywords: ['elektronik', 'gadget', 'handphone'], category: 'Elektronik' },
+    { keywords: ['kucing', 'anjing', 'hewan peliharaan'], category: 'Hewan Peliharaan' },
+    { keywords: ['kegiatan sosial', 'event','arisan'], category: 'Kegiatan Sosial' },
+    { keywords: ['lainnya', 'lain lain'], category: 'Lainnya' }
+  ];
+
   if (type === 'income') {
-    // Income categories
-    if (text.includes('gaji') || text.includes('salary')) category = 'Gaji';
-    else if (text.includes('bonus') || text.includes('thr')) category = 'Bonus';
-    else if (text.includes('freelance') || text.includes('project')) category = 'Freelance';
-    else if (text.includes('komisi') || text.includes('fee')) category = 'Komisi';
-    else category = 'Pemasukan';
+    let found = false;
+    for (const { keywords, category: cat } of incomeCategories) {
+      if (keywords.some(k => text.includes(k))) {
+        category = cat;
+        found = true;
+        break;
+      }
+    }
+    if (!found) category = 'Pemasukan';
   } else {
-    // Expense categories
-    if (text.includes('makan') || text.includes('minum') || text.includes('restoran')) category = 'Makan';
-    else if (text.includes('bensin') || text.includes('transport') || text.includes('ojek') || text.includes('grab')) category = 'Transport';
-    else if (text.includes('listrik') || text.includes('tagihan') || text.includes('wifi') || text.includes('pulsa')) category = 'Tagihan';
-    else if (text.includes('belanja') || text.includes('beli') || text.includes('shopping')) category = 'Belanja';
-    else category = 'Pengeluaran';
+    let found = false;
+    for (const { keywords, category: cat } of expenseCategories) {
+      if (keywords.some(k => text.includes(k))) {
+        category = cat;
+        found = true;
+        break;
+      }
+    }
+    if (!found) category = 'Pengeluaran';
   }
   
   return {

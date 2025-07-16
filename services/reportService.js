@@ -12,25 +12,66 @@ function generateReport(transactions, period) {
   const balance = income - expense;
 
   let report = `📊 *LAPORAN ${period.toUpperCase()}*\n\n`;
-  report += `💰 Pemasukan: ${formatCurrency(income)}\n`;
-  report += `💸 Pengeluaran: ${formatCurrency(expense)}\n`;
-  report += `📈 Saldo: ${formatCurrency(balance)}\n\n`;
+  report += `💰 *Pemasukan:* ${formatCurrency(income)}\n`;
+  report += `💸 *Pengeluaran:* ${formatCurrency(expense)}\n`;
+  report += `📈 *Saldo:* ${formatCurrency(balance)}\n\n`;
+
+  const categoryIcons = {
+    Makan: "🍽️",
+    Transport: "🚌",
+    Gaji: "💼",
+    Belanja: "🛒",
+    Hiburan: "🎬",
+    Kesehatan: "🏥",
+    Lainnya: "📦",
+    Pendidikan: "🎓",
+    Hadiah: "🎁",
+    Investasi: "📈",
+    Tagihan: "🧾",
+    Pulsa: "📱",
+    Internet: "🌐",
+    Donasi: "🙏",
+    Rumah: "🏠",
+    Liburan: "🏖️",
+    Asuransi: "🛡️",
+    Perawatan: "💇",
+    Anak: "🧒",
+    OrangTua: "👵",
+    Teman: "👫",
+    Bisnis: "🏢",
+    Pajak: "💸",
+    Hutang: "🤝",
+    Piutang: "💳",
+    Elektronik: "💻",
+    Kendaraan: "🚗",
+    Bensin: "⛽",
+    Laundry: "🧺",
+    MakananRingan: "🍩",
+    Minuman: "🥤",
+    Perlengkapan: "🧰",
+    Perbaikan: "🔧",
+    Kado: "🎀",
+    UangMasukLain: "➕",
+    UangKeluarLain: "➖"
+  };
 
   if (transactions.length > 0) {
     report += `📝 *Transaksi (${transactions.length}):*\n`;
-    transactions.slice(0, 5).forEach((t, i) => {
+    transactions.slice(0, 15).forEach((t, i) => {
       const sign = t.type === "income" ? "+" : "-";
+      const typeIcon = t.type === "income" ? "🟢" : "🔴";
       const date = moment(t.date).format("DD/MM");
-      report += `${i + 1}. [${date}] #${t.id} ${sign}${formatCurrency(
+      const catIcon = categoryIcons[t.category] || "📂";
+      report += `${i + 1}. [${date}] #${t.id} ${typeIcon}${sign}${formatCurrency(
         t.amount
       )}\n`;
-      report += `   📂 ${t.category} - ${t.description.substring(0, 25)}${
+      report += `   ${catIcon} ${t.category} - ${t.description.substring(0, 25)}${
         t.description.length > 25 ? "..." : ""
       }\n`;
     });
 
-    if (transactions.length > 5) {
-      report += `\n...dan ${transactions.length - 5} transaksi lainnya`;
+    if (transactions.length > 15) {
+      report += `\n...dan ${transactions.length - 15} transaksi lainnya`;
     }
   }
 

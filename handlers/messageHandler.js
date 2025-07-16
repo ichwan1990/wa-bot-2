@@ -569,7 +569,7 @@ async function handleCommand(sock, sender, user, command, args) {
 
     default:
       await sock.sendMessage(sender, {
-        text: "❌ Command tidak dikenal. Ketik /help atau /menu",
+        //text: "❌ Command tidak dikenal. Ketik /help atau /menu",
       });
       logger.debug("Unknown command", { command, from: sender.split("@")[0] });
   }
@@ -698,7 +698,7 @@ Ketik /saldo untuk cek saldo atau /chart untuk lihat grafik`;
         }
       } else {
         await sock.sendMessage(sender, { 
-          text: '❓ Tidak dapat memahami pesan\n\nContoh:\n• bayar makan 25000\n• terima gaji 5jt\n• m 25000 (makan cepat)\n• t 15000 (transport cepat)\n• /ocr (untuk scan foto)\n• /absen (untuk absensi)\n\nKetik /menu untuk pilihan cepat atau /chart untuk grafik' 
+          //text: '❓ Tidak dapat memahami pesan\n\nContoh:\n• bayar makan 25000\n• terima gaji 5jt\n• m 25000 (makan cepat)\n• t 15000 (transport cepat)\n• /ocr (untuk scan foto)\n• /absen (untuk absensi)\n\nKetik /menu untuk pilihan cepat atau /chart untuk grafik' 
         });
         
         logger.debug('Message parsing failed', { 
@@ -714,7 +714,7 @@ Ketik /saldo untuk cek saldo atau /chart untuk lihat grafik`;
       stack: error.stack
     });
     
-    await sock.sendMessage(sender, { text: '❌ Terjadi kesalahan sistem' });
+    //await sock.sendMessage(sender, { text: '❌ Terjadi kesalahan sistem' });
   }
 }
 
