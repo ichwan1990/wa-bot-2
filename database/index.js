@@ -39,6 +39,7 @@ function createTables() {
       amount REAL,
       category TEXT,
       description TEXT,
+      payment_method TEXT DEFAULT 'cash',
       date DATE,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
@@ -48,6 +49,38 @@ function createTables() {
           error: err.message,
         });
       else logger.debug("Transactions table ready");
+    }
+  );
+
+  // Add payment_method column if it doesn't exist (for existing databases)
+  db.run(
+    `ALTER TABLE transactions ADD COLUMN payment_method TEXT DEFAULT 'cash'`,
+    (err) => {
+      // Ignore error if column already exists
+      if (err && !err.message.includes('duplicate column name')) {
+        logger.error("Error adding payment_method column", { error: err.message });
+      } else {
+        logger.debug("Payment method column ready");
+      }
+    }
+  );
+
+  // User balances table
+  db.run(
+    `CREATE TABLE IF NOT EXISTS user_balances (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER UNIQUE,
+      cash_balance REAL DEFAULT 0,
+      bank_balance REAL DEFAULT 0,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    )`,
+    (err) => {
+      if (err)
+        logger.error("Error creating user_balances table", {
+          error: err.message,
+        });
+      else logger.debug("User balances table ready");
     }
   );
 
@@ -65,42 +98,6 @@ function createTables() {
         });
       else logger.debug("Whitelist table ready");
     }
-  );
-
-  // Tambahkan setelah pembuatan tabel users dan transactions
-  db.run(
-    `
-      CREATE TABLE IF NOT EXISTS attendance (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        type TEXT NOT NULL CHECK(type IN ('masuk', 'pulang')),
-        latitude REAL NOT NULL,
-        longitude REAL NOT NULL,
-        photo_path TEXT,
-        distance INTEGER NOT NULL,
-        date TEXT NOT NULL,
-        time TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users (id)
-      )
-    `,
-    (err) => {
-      if (err) {
-        logger.error("Error creating attendance table", {
-          error: err.message,
-        });
-      } else {
-        logger.info("Attendance table ready");
-      }
-    }
-  );
-
-  // Index untuk performa
-  db.run(
-    `CREATE INDEX IF NOT EXISTS idx_attendance_user_date ON attendance(user_id, date)`
-  );
-  db.run(
-    `CREATE INDEX IF NOT EXISTS idx_attendance_user_created ON attendance(user_id, created_at)`
   );
 
   // Add admin numbers to whitelist
@@ -224,7 +221,6 @@ function insertDefaultRoles() {
         "reports",
         "charts",
         "categories",
-        "ocr",
       ]),
       commands: JSON.stringify([
         "/saldo",
@@ -234,7 +230,6 @@ function insertDefaultRoles() {
         "/pie",
         "/compare",
         "/hapus",
-        "/ocr",
         "/menu",
         "/help",
         "/stats",
@@ -243,30 +238,15 @@ function insertDefaultRoles() {
       quick_numbers: JSON.stringify([1, 2, 3, 4, 5, 6, 7, 8, 9, 0]),
     },
     {
-      name: "attendance",
-      display_name: "Absensi",
-      emoji: "🏢",
-      description: "Mengelola absensi dengan validasi lokasi dan foto",
-      features: JSON.stringify([
-        "attendance",
-        "location_tracking",
-        "photo_verification",
-      ]),
-      commands: JSON.stringify(["/absen", "/help", "/menu"]),
-      shortcuts: JSON.stringify([]),
-      quick_numbers: JSON.stringify([]),
-    },
-    {
       name: "cashier",
       display_name: "Kasir",
       emoji: "🏪",
       description: "Mengelola penjualan, stok, dan laporan kasir",
-      features: JSON.stringify(["sales", "inventory", "daily_reports", "ocr"]),
+      features: JSON.stringify(["sales", "inventory", "daily_reports"]),
       commands: JSON.stringify([
         "/jual",
         "/stok",
         "/laporan",
-        "/ocr",
         "/help",
         "/menu",
       ]),
@@ -328,6 +308,88 @@ function getDB() {
   return db;
 }
 
+// Get user balance
+function getUserBalance(userId, callback) {
+  db.get(
+    `SELECT cash_balance, bank_balance 
+     FROM user_balances 
+     WHERE user_id = ?`,
+    [userId],
+    (err, row) => {
+      if (err) {
+        logger.error("Error getting user balance", { userId, error: err.message });
+        callback(err, null);
+      } else if (row) {
+        callback(null, {
+          cash: row.cash_balance || 0,
+          bank: row.bank_balance || 0,
+          total: (row.cash_balance || 0) + (row.bank_balance || 0)
+        });
+      } else {
+        // Initialize user balance if doesn't exist
+        db.run(
+          `INSERT INTO user_balances (user_id, cash_balance, bank_balance) 
+           VALUES (?, 0, 0)`,
+          [userId],
+          function(err) {
+            if (err) {
+              logger.error("Error initializing user balance", { userId, error: err.message });
+              callback(err, null);
+            } else {
+              callback(null, { cash: 0, bank: 0, total: 0 });
+            }
+          }
+        );
+      }
+    }
+  );
+}
+
+// Update user balance
+function updateUserBalance(userId, cashChange, bankChange, callback) {
+  // First ensure user balance record exists
+  db.run(
+    `INSERT OR IGNORE INTO user_balances (user_id, cash_balance, bank_balance) 
+     VALUES (?, 0, 0)`,
+    [userId],
+    function(err) {
+      if (err) {
+        logger.error("Error ensuring user balance exists", { userId, error: err.message });
+        callback(err);
+        return;
+      }
+      
+      // Update the balance
+      db.run(
+        `UPDATE user_balances 
+         SET cash_balance = cash_balance + ?, 
+             bank_balance = bank_balance + ?,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = ?`,
+        [cashChange, bankChange, userId],
+        function(err) {
+          if (err) {
+            logger.error("Error updating user balance", { 
+              userId, 
+              cashChange, 
+              bankChange, 
+              error: err.message 
+            });
+            callback(err);
+          } else {
+            logger.debug("User balance updated", { 
+              userId, 
+              cashChange, 
+              bankChange 
+            });
+            callback(null);
+          }
+        }
+      );
+    }
+  );
+}
+
 // Close database
 function closeDB(callback) {
   if (db) {
@@ -347,5 +409,7 @@ function closeDB(callback) {
 module.exports = {
   initDB,
   getDB,
+  getUserBalance,
+  updateUserBalance,
   closeDB,
 };

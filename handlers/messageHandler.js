@@ -4,16 +4,13 @@ const { logger, adminNumbers } = require('../config');
 const { isGroupChat, isBroadcast, isPrivateChat } = require('../utils/chatUtils');
 const { messageStats, getStatsText } = require('../utils/messageStats');
 const { formatCurrency } = require('../utils/formatter');
-const { OCRStateManager } = require('../utils/ocrStateManager');
-const { handleOCRCommand, handleOCRImage, handleOCRConfirmation } = require('./ocrHandler');
 const { 
-  handleAttendanceCommand,
-  handleAttendanceChoice,
-  handleAttendanceLocation,
-  handleAttendancePhoto,
-  handleAttendanceCancel,
-  AttendanceStateManager
-} = require('./attendanceHandler');
+  success, 
+  error, 
+  info, 
+  chartCaptions, 
+  formatters 
+} = require('../utils/messages');
 const { 
   isWhitelisted, 
   getUser, 
@@ -27,7 +24,8 @@ const {
   getTransactions,
   getTransactionsByCategory,
   getCategorySummary,
-  deleteTransaction
+  deleteTransaction,
+  getUserBalance
 } = require('../services/transactionService');
 const {
   generateReport,
@@ -73,26 +71,43 @@ async function sendImageMessage(sock, jid, imagePath, caption) {
 // Handle quick number commands
 async function handleQuickNumber(sock, sender, user, quickNumber) {
   switch (quickNumber) {
-    case 1: // /saldo
-      const dayTransactions = await getTransactions(user.id, 'day');
-      const dayReport = generateReport(dayTransactions, 'HARI INI');
-      await sock.sendMessage(sender, { text: dayReport });
+    case 1: // Catat Pemasukan
+      await sock.sendMessage(sender, { text: info.menu });
       break;
       
-    case 2: // /bulan
+    case 2: // Catat Pengeluaran  
+      await sock.sendMessage(sender, { text: info.menu });
+      break;
+      
+    case 3: // Lihat Saldo
+      const balance = await getUserBalance(user.id);
+      await sock.sendMessage(sender, { text: success.balanceDisplay(balance) });
+      break;
+      
+    case 4: // Grafik Keuangan
+      await sock.sendMessage(sender, { text: info.chartMenu });
+      break;
+      
+    case 5: // Rekap Bulanan
       const monthTransactions = await getTransactions(user.id, 'month');
       const monthReport = generateReport(monthTransactions, 'BULAN INI');
       await sock.sendMessage(sender, { text: monthReport });
       break;
       
-    case 3: // /kategori
-      const categorySummary = await getCategorySummary(user.id, 'month');
-      const summaryReport = generateCategorySummaryReport(categorySummary, 'BULAN INI');
-      await sock.sendMessage(sender, { text: summaryReport });
+    case 6: // Hapus Transaksi
+      await sock.sendMessage(sender, { text: MESSAGES.formatErrorDelete });
+      break;
+      
+    case 7: // Panduan Lengkap
+      await sock.sendMessage(sender, { text: info.help });
+      break;
+      
+    case 8: // Kembali ke Menu
+      await sock.sendMessage(sender, { text: info.menu });
       break;
       
     case 4: // /chart - line chart
-      await sock.sendMessage(sender, { text: '📊 Membuat grafik trend... Mohon tunggu sebentar' });
+      await sock.sendMessage(sender, { text: success.chartGenerating.line });
       
       // Try QuickChart API first
       let chartPath = await generateQuickChart(user.id, 'line', 'month');
@@ -103,7 +118,11 @@ async function handleQuickNumber(sock, sender, user, quickNumber) {
         const income = monthTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
         const expense = monthTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
         
-        const caption = `📈 *Grafik Trend Keuangan Bulanan*\n\n💰 Total Pemasukan: ${formatCurrency(income)}\n💸 Total Pengeluaran: ${formatCurrency(expense)}\n📊 Net: ${formatCurrency(income - expense)}`;
+        const caption = chartCaptions.lineChart(
+          formatCurrency(income), 
+          formatCurrency(expense), 
+          formatCurrency(income - expense)
+        );
         
         const sent = await sendImageMessage(sock, sender, chartPath, caption);
         if (!sent) {
@@ -119,7 +138,7 @@ async function handleQuickNumber(sock, sender, user, quickNumber) {
       break;
       
     case 5: // /pie - pie chart
-      await sock.sendMessage(sender, { text: '🥧 Membuat pie chart... Mohon tunggu sebentar' });
+      await sock.sendMessage(sender, { text: success.chartGenerating.pie });
       
       let pieChartPath = await generateQuickChart(user.id, 'pie', 'month');
       
@@ -129,7 +148,7 @@ async function handleQuickNumber(sock, sender, user, quickNumber) {
         const expenseData = categorySummary.filter(s => s.type === 'expense');
         const total = expenseData.reduce((sum, s) => sum + s.total, 0);
         
-        const caption = `🥧 *Breakdown Pengeluaran Bulanan*\n\n💸 Total: ${formatCurrency(total)}\n📊 Kategori: ${expenseData.length}`;
+        const caption = chartCaptions.pieChart(formatCurrency(total), expenseData.length);
         
         const sent = await sendImageMessage(sock, sender, pieChartPath, caption);
         if (!sent) {
@@ -143,7 +162,7 @@ async function handleQuickNumber(sock, sender, user, quickNumber) {
       break;
       
     case 6: // /compare - bar chart
-      await sock.sendMessage(sender, { text: '📊 Membuat grafik perbandingan... Mohon tunggu sebentar' });
+      await sock.sendMessage(sender, { text: success.chartGenerating.bar });
       
       let barChartPath = await generateQuickChart(user.id, 'bar', 'month');
       
@@ -153,7 +172,7 @@ async function handleQuickNumber(sock, sender, user, quickNumber) {
         const currentIncome = currentMonth.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
         const currentExpense = currentMonth.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
         
-        const caption = `📊 *Perbandingan 3 Bulan Terakhir*\n\n📅 Bulan Ini:\n💰 Pemasukan: ${formatCurrency(currentIncome)}\n💸 Pengeluaran: ${formatCurrency(currentExpense)}`;
+        const caption = chartCaptions.barChart(formatCurrency(currentIncome), formatCurrency(currentExpense));
         
         const sent = await sendImageMessage(sock, sender, barChartPath, caption);
         if (!sent) {
@@ -166,28 +185,8 @@ async function handleQuickNumber(sock, sender, user, quickNumber) {
       }
       break;
       
-    case 7: // m [jumlah] - makan
-      await sock.sendMessage(sender, { 
-        text: '🍽️ *INPUT MAKAN*\n\nFormat: m [jumlah]\nContoh: m 25000 atau m 25rb\n\nKetik sekarang:' 
-      });
-      break;
-      
-    case 8: // t [jumlah] - transport
-      await sock.sendMessage(sender, { 
-        text: '🚗 *INPUT TRANSPORT*\n\nFormat: t [jumlah]\nContoh: t 15000 atau t 15rb\n\nKetik sekarang:' 
-      });
-      break;
-      
-    case 9: // g [jumlah] - gaji
-      await sock.sendMessage(sender, { 
-        text: '💰 *INPUT GAJI*\n\nFormat: g [jumlah]\nContoh: g 5jt atau g 5000000\n\nKetik sekarang:' 
-      });
-      break;
-      
-    case 0: // /hapus
-      await sock.sendMessage(sender, { 
-        text: '🗑️ *HAPUS TRANSAKSI*\n\nFormat: /hapus [ID]\nContoh: /hapus 123\n\nCek ID transaksi di laporan (/saldo atau /bulan)' 
-      });
+    default:
+      await sock.sendMessage(sender, { text: info.menu });
       break;
   }
   
@@ -220,16 +219,18 @@ async function handleShortcutCommand(sock, sender, user, text) {
     const transactionId = await addTransaction(user.id, parsed);
     
     if (transactionId) {
-      const sign = parsed.type === 'income' ? '+' : '-';
+      // Get updated balance after transaction
+      const balance = await getUserBalance(user.id);
       
-      const response = `✅ *Transaksi Cepat Ditambahkan*
-
-📄 ID: #${transactionId}
-💰 ${sign}${formatCurrency(parsed.amount)}
-📂 ${parsed.category}
-📝 ${parsed.description}
-
-Ketik /saldo untuk cek saldo`;
+      const response = formatters.quickTransactionSuccess(
+        transactionId, 
+        parsed.type, 
+        formatCurrency(parsed.amount), 
+        parsed.category, 
+        parsed.description,
+        parsed.paymentMethod,
+        balance
+      );
       
       await sock.sendMessage(sender, { text: response });
       
@@ -239,15 +240,15 @@ Ketik /saldo untuk cek saldo`;
         shortcut,
         type: parsed.type,
         amount: parsed.amount,
+        paymentMethod: parsed.paymentMethod,
+        newBalance: balance,
         from: sender.split('@')[0]
       });
     } else {
-      await sock.sendMessage(sender, { text: '❌ Gagal menambahkan transaksi' });
+      await sock.sendMessage(sender, { text: error.transactionFailed });
     }
   } else {
-    await sock.sendMessage(sender, { 
-      text: `❌ Format salah untuk ${shortcut.toUpperCase()}\n\nContoh yang benar:\n• ${shortcut} 25000\n• ${shortcut} 50rb\n• ${shortcut} 2jt` 
-    });
+    await sock.sendMessage(sender, { text: error.invalidFormat.shortcut(shortcut) });
   }
 }
 
@@ -273,25 +274,9 @@ async function handleCommand(sock, sender, user, command, args) {
       logger.debug("Quick menu sent", { to: sender.split("@")[0] });
       break;
 
-    case "absen":
-    case "attendance":
-      const userNumber = sender.split("@")[0];
-      await handleAttendanceCommand(sock, sender, userNumber, args); // Pass args
-      break;
-
-    case "ocr":
-      await handleOCRCommand(
-        sock,
-        { key: { remoteJid: sender } },
-        sender.split("@")[0]
-      );
-      break;
-
     case "chart":
       const period = args[0] || "month";
-      await sock.sendMessage(sender, {
-        text: "📊 Membuat grafik trend... Mohon tunggu sebentar",
-      });
+      await sock.sendMessage(sender, { text: success.chartGenerating.line });
 
       let lineChartPath = await generateQuickChart(user.id, "line", period);
 
@@ -305,9 +290,11 @@ async function handleCommand(sock, sender, user, command, args) {
           .filter((t) => t.type === "expense")
           .reduce((sum, t) => sum + t.amount, 0);
 
-        const caption = `📈 *Grafik Trend Keuangan*\nPeriode: ${period}\n\n💰 Pemasukan: ${formatCurrency(
-          income
-        )}\n💸 Pengeluaran: ${formatCurrency(expense)}`;
+        const caption = chartCaptions.lineChartPeriod(
+          period, 
+          formatCurrency(income), 
+          formatCurrency(expense)
+        );
 
         const sent = await sendImageMessage(
           sock,
@@ -326,9 +313,7 @@ async function handleCommand(sock, sender, user, command, args) {
       break;
 
     case "pie":
-      await sock.sendMessage(sender, {
-        text: "🥧 Membuat pie chart pengeluaran... Mohon tunggu sebentar",
-      });
+      await sock.sendMessage(sender, { text: success.chartGenerating.pie });
 
       let pieChartPath = await generateQuickChart(user.id, "pie", "month");
 
@@ -338,9 +323,10 @@ async function handleCommand(sock, sender, user, command, args) {
         const expenseData = categorySummary.filter((s) => s.type === "expense");
         const total = expenseData.reduce((sum, s) => sum + s.total, 0);
 
-        const caption = `🥧 *Breakdown Pengeluaran Bulanan*\n\n💸 Total: ${formatCurrency(
-          total
-        )}\n📊 Kategori: ${expenseData.length}`;
+        const caption = chartCaptions.pieChart(
+          formatCurrency(total), 
+          expenseData.length
+        );
 
         const sent = await sendImageMessage(
           sock,
@@ -359,9 +345,7 @@ async function handleCommand(sock, sender, user, command, args) {
       break;
 
     case "compare":
-      await sock.sendMessage(sender, {
-        text: "📊 Membuat grafik perbandingan... Mohon tunggu sebentar",
-      });
+      await sock.sendMessage(sender, { text: success.chartGenerating.bar });
 
       let barChartPath = await generateQuickChart(user.id, "bar", "month");
 
@@ -375,9 +359,10 @@ async function handleCommand(sock, sender, user, command, args) {
           .filter((t) => t.type === "expense")
           .reduce((sum, t) => sum + t.amount, 0);
 
-        const caption = `📊 *Perbandingan 3 Bulan Terakhir*\n\n📅 Bulan Ini:\n💰 Pemasukan: ${formatCurrency(
-          currentIncome
-        )}\n💸 Pengeluaran: ${formatCurrency(currentExpense)}`;
+        const caption = chartCaptions.barChart(
+          formatCurrency(currentIncome), 
+          formatCurrency(currentExpense)
+        );
 
         const sent = await sendImageMessage(
           sock,
@@ -459,12 +444,30 @@ async function handleCommand(sock, sender, user, command, args) {
       logger.debug("Top category report sent", { to: sender.split("@")[0] });
       break;
 
+    case "saldo":
+      const currentBalance = await getUserBalance(user.id);
+      await sock.sendMessage(sender, { text: success.balanceDisplay(currentBalance) });
+      logger.debug("Balance display sent", { 
+        to: sender.split("@")[0],
+        cash: currentBalance.cash,
+        bank: currentBalance.bank,
+        total: currentBalance.total
+      });
+      break;
+
     case "hapus":
       if (args[0] && !isNaN(args[0])) {
-        const deleted = await deleteTransaction(args[0], user.id);
-        if (deleted) {
+        const result = await deleteTransaction(args[0], user.id);
+        if (result.success) {
+          // Get updated balance untuk ditampilkan
+          const balance = await getUserBalance(user.id);
+          const balanceInfo = MESSAGES.formatBalanceInfo(balance.cash, balance.bank, balance.total);
+          
+          const deleteMessage = success.transactionDeleted(result.transaction);
+          const fullMessage = deleteMessage + '\n\n' + balanceInfo;
+          
           await sock.sendMessage(sender, {
-            text: `✅ Transaksi #${args[0]} dihapus`,
+            text: fullMessage,
           });
           logger.info("Transaction deleted via command", {
             transactionId: args[0],
@@ -473,23 +476,21 @@ async function handleCommand(sock, sender, user, command, args) {
           });
         } else {
           await sock.sendMessage(sender, {
-            text: "❌ Transaksi tidak ditemukan",
+            text: error.transactionNotFound,
           });
           logger.warn("Delete transaction failed - not found", {
             transactionId: args[0],
             userId: user.id,
+            error: result.error,
           });
         }
       } else {
-        await sock.sendMessage(sender, { text: "❌ Format: /hapus [ID]" });
+        await sock.sendMessage(sender, { text: error.invalidFormat.delete });
       }
       break;
 
     case "stats":
       let statsText = getStatsText();
-      statsText += `\n🔍 OCR Processed: ${messageStats.ocrProcessed || 0}`;
-      statsText += `\n👥 Active OCR Sessions: ${OCRStateManager.getActiveStatesCount()}`;
-      statsText += `\n🏢 Active Attendance Sessions: ${AttendanceStateManager.getActiveStatesCount()}`;
       await sock.sendMessage(sender, { text: statsText });
       messageStats.commands++;
       break;
@@ -500,7 +501,7 @@ async function handleCommand(sock, sender, user, command, args) {
         logger.warn("Unauthorized admin access attempt", {
           from: sender.split("@")[0],
         });
-        await sock.sendMessage(sender, { text: "❌ Akses ditolak" });
+        await sock.sendMessage(sender, { text: error.accessDenied });
         return;
       }
 
@@ -509,7 +510,7 @@ async function handleCommand(sock, sender, user, command, args) {
         try {
           await addToWhitelist(phone);
           await sock.sendMessage(sender, {
-            text: `✅ ${args[1]} ditambah ke whitelist`,
+            text: success.whitelistAdded(args[1]),
           });
           logger.info("User added to whitelist via admin command", {
             phone: args[1],
@@ -517,7 +518,7 @@ async function handleCommand(sock, sender, user, command, args) {
           });
         } catch (err) {
           await sock.sendMessage(sender, {
-            text: "❌ Gagal menambah ke whitelist",
+            text: error.whitelistAddFailed,
           });
         }
       } else if (args[0] === "remove" && args[1]) {
@@ -526,7 +527,7 @@ async function handleCommand(sock, sender, user, command, args) {
           const removed = await removeFromWhitelist(phone);
           if (removed) {
             await sock.sendMessage(sender, {
-              text: `✅ ${args[1]} dihapus dari whitelist`,
+              text: success.whitelistRemoved(args[1]),
             });
             logger.info("User removed from whitelist via admin command", {
               phone: args[1],
@@ -534,12 +535,12 @@ async function handleCommand(sock, sender, user, command, args) {
             });
           } else {
             await sock.sendMessage(sender, {
-              text: "❌ Nomor tidak ditemukan di whitelist",
+              text: error.whitelistNotFound,
             });
           }
         } catch (err) {
           await sock.sendMessage(sender, {
-            text: "❌ Gagal menghapus dari whitelist",
+            text: error.whitelistRemoveFailed,
           });
         }
       } else if (args[0] === "list") {
@@ -548,13 +549,11 @@ async function handleCommand(sock, sender, user, command, args) {
           const phoneList = rows
             .map((row) => row.phone.replace("@s.whatsapp.net", ""))
             .join("\n");
-          const listText = `📋 *Whitelist (${rows.length}):*\n\n${
-            phoneList || "Kosong"
-          }`;
+          const listText = info.whitelistInfo(rows.length, phoneList);
           await sock.sendMessage(sender, { text: listText });
         } catch (err) {
           await sock.sendMessage(sender, {
-            text: "❌ Gagal mengambil whitelist",
+            text: error.whitelistGetFailed,
           });
         }
       } else if (args[0] === "stats") {
@@ -562,7 +561,7 @@ async function handleCommand(sock, sender, user, command, args) {
         await sock.sendMessage(sender, { text: statsText });
       } else {
         await sock.sendMessage(sender, {
-          text: "❌ Format: /admin [add|remove|list|stats] [nomor]",
+          text: error.invalidFormat.admin,
         });
       }
       break;
@@ -575,64 +574,21 @@ async function handleCommand(sock, sender, user, command, args) {
   }
 }
 
-// Handle text messages with OCR and Attendance state management
+// Handle text messages
 async function handleTextMessage(sock, sender, user, text) {
   const userNumber = sender.split('@')[0];
   
   try {
-    // Handle OCR confirmation if user is waiting
-    if (OCRStateManager.isWaitingForConfirmation(userNumber)) {
-      await handleOCRConfirmation(sock, { key: { remoteJid: sender } }, userNumber, text);
-      return;
-    }
-    
-    // Handle attendance cancellation
-    if ((text.toLowerCase() === 'batal' || text.toLowerCase() === 'cancel')) {
-      // Check OCR mode first
-      if (OCRStateManager.isWaitingForImage(userNumber)) {
-        OCRStateManager.clearUserState(userNumber);
-        await sock.sendMessage(sender, {
-          text: '❌ Mode OCR dibatalkan.'
-        });
-        return;
-      }
-      
-      // Check attendance mode
-      if (AttendanceStateManager.isWaitingForLocation(userNumber) || 
-          AttendanceStateManager.isWaitingForPhoto(userNumber)) {
-        await handleAttendanceCancel(sock, sender, userNumber);
-        return;
-      }
-    }
-    
-    // Handle attendance menu choices (1-4) when user just started attendance
-    if (/^[1-4]$/.test(text.trim()) && 
-        !OCRStateManager.isWaitingForConfirmation(userNumber) &&
-        !OCRStateManager.isWaitingForImage(userNumber) &&
-        !AttendanceStateManager.isWaitingForLocation(userNumber) &&
-        !AttendanceStateManager.isWaitingForPhoto(userNumber)) {
-      // This could be attendance menu choice, but we need to check if they just used /absen
-      // For now, let it fall through to quick numbers
-    }
-    
-    // Handle numbered quick commands (0-9) - but not when in attendance/OCR mode
-    if (/^[0-9]$/.test(text.trim()) && 
-        !OCRStateManager.isWaitingForConfirmation(userNumber) &&
-        !OCRStateManager.isWaitingForImage(userNumber) &&
-        !AttendanceStateManager.isWaitingForLocation(userNumber) &&
-        !AttendanceStateManager.isWaitingForPhoto(userNumber)) {
+    // Handle numbered quick commands (0-9)
+    if (/^[0-9]$/.test(text.trim())) {
       messageStats.commands++;
       const quickNumber = parseInt(text.trim());
       await handleQuickNumber(sock, sender, user, quickNumber);
       return;
     }
     
-    // Handle shortcut commands (m, t, g) - but not when in special modes
-    if (/^[mtg]\s+/.test(text.toLowerCase()) &&
-        !OCRStateManager.isWaitingForConfirmation(userNumber) &&
-        !OCRStateManager.isWaitingForImage(userNumber) &&
-        !AttendanceStateManager.isWaitingForLocation(userNumber) &&
-        !AttendanceStateManager.isWaitingForPhoto(userNumber)) {
+    // Handle shortcut commands (m, t, g)
+    if (/^[mtg]\s+/.test(text.toLowerCase())) {
       await handleShortcutCommand(sock, sender, user, text);
       return;
     }
@@ -643,27 +599,6 @@ async function handleTextMessage(sock, sender, user, text) {
       const [command, ...args] = text.slice(1).split(' ');
       await handleCommand(sock, sender, user, command, args);
     } else {
-      // Don't process natural language when in special modes
-      if (OCRStateManager.isWaitingForImage(userNumber) ||
-          AttendanceStateManager.isWaitingForLocation(userNumber) ||
-          AttendanceStateManager.isWaitingForPhoto(userNumber)) {
-        // User is in special mode, provide guidance
-        if (OCRStateManager.isWaitingForImage(userNumber)) {
-          await sock.sendMessage(sender, { 
-            text: '🔍 Menunggu foto struk untuk di-scan.\nKirim foto atau ketik "batal" untuk membatalkan.' 
-          });
-        } else if (AttendanceStateManager.isWaitingForLocation(userNumber)) {
-          await sock.sendMessage(sender, { 
-            text: '📍 Menunggu lokasi untuk absensi.\nKirim lokasi atau ketik "batal" untuk membatalkan.' 
-          });
-        } else if (AttendanceStateManager.isWaitingForPhoto(userNumber)) {
-          await sock.sendMessage(sender, { 
-            text: '📸 Menunggu foto selfie untuk absensi.\nKirim foto atau ketik "batal" untuk membatalkan.' 
-          });
-        }
-        return;
-      }
-      
       // Parse natural language transaction
       const parsed = parseTransaction(text);
       
@@ -672,16 +607,19 @@ async function handleTextMessage(sock, sender, user, text) {
         
         if (transactionId) {
           messageStats.transactions++;
-          const sign = parsed.type === 'income' ? '+' : '-';
           
-          const response = `✅ *Transaksi Ditambahkan*
-
-📄 ID: #${transactionId}
-💰 ${sign}${formatCurrency(parsed.amount)}
-📂 ${parsed.category}
-📝 ${parsed.description}
-
-Ketik /saldo untuk cek saldo atau /chart untuk lihat grafik`;
+          // Get updated balance after transaction
+          const balance = await getUserBalance(user.id);
+          
+          const response = formatters.transactionSuccess(
+            transactionId, 
+            parsed.type, 
+            formatCurrency(parsed.amount), 
+            parsed.category, 
+            parsed.description,
+            parsed.paymentMethod,
+            balance
+          );
           
           await sock.sendMessage(sender, { text: response });
           
@@ -691,15 +629,15 @@ Ketik /saldo untuk cek saldo atau /chart untuk lihat grafik`;
             type: parsed.type,
             amount: parsed.amount,
             category: parsed.category,
+            paymentMethod: parsed.paymentMethod,
+            newBalance: balance,
             from: sender.split('@')[0]
           });
         } else {
-          await sock.sendMessage(sender, { text: '❌ Gagal menambahkan transaksi' });
+          await sock.sendMessage(sender, { text: error.transactionFailed });
         }
       } else {
-        await sock.sendMessage(sender, { 
-          //text: '❓ Tidak dapat memahami pesan\n\nContoh:\n• bayar makan 25000\n• terima gaji 5jt\n• m 25000 (makan cepat)\n• t 15000 (transport cepat)\n• /ocr (untuk scan foto)\n• /absen (untuk absensi)\n\nKetik /menu untuk pilihan cepat atau /chart untuk grafik' 
-        });
+        await sock.sendMessage(sender, { text: error.parseMessageFailed });
         
         logger.debug('Message parsing failed', { 
           from: sender.split('@')[0], 
@@ -714,7 +652,7 @@ Ketik /saldo untuk cek saldo atau /chart untuk lihat grafik`;
       stack: error.stack
     });
     
-    //await sock.sendMessage(sender, { text: '❌ Terjadi kesalahan sistem' });
+    await sock.sendMessage(sender, { text: error.systemError });
   }
 }
 
@@ -794,34 +732,16 @@ async function handleMessage(sock, m) {
       await handleTextMessage(sock, sender, user, text);
       
     } else if (message.message.imageMessage) {
-      // Handle image message
-      if (OCRStateManager.isWaitingForImage(userNumber)) {
-        // User is in OCR mode, process the image
-        await handleOCRImage(sock, message, userNumber);
-      } else if (AttendanceStateManager.isWaitingForPhoto(userNumber)) {
-        // User is in attendance mode, process the photo
-        await handleAttendancePhoto(sock, message, userNumber);
-      } else {
-        // User sent image without OCR or attendance mode
-        await sock.sendMessage(sender, {
-          text: '📸 **Foto diterima!**\n\n' +
-                '🔍 Untuk memproses dengan OCR, ketik **/ocr** terlebih dahulu\n' +
-                '🏢 Untuk absensi, ketik **/absen** terlebih dahulu\n\n' +
-                '💡 Atau gunakan /menu untuk fitur lainnya.'
-        });
-      }
+      // Handle image message - just inform user about available features
+      await sock.sendMessage(sender, {
+        text: success.imageReceived
+      });
       
     } else if (message.message.locationMessage) {
-      // Handle location message
-      if (AttendanceStateManager.isWaitingForLocation(userNumber)) {
-        await handleAttendanceLocation(sock, message, userNumber);
-      } else {
-        await sock.sendMessage(sender, {
-          text: '📍 **Lokasi diterima!**\n\n' +
-                '🏢 Untuk absensi, ketik **/absen** terlebih dahulu\n\n' +
-                '💡 Atau gunakan /menu untuk fitur lainnya.'
-        });
-      }
+      // Handle location message - just inform user about available features
+      await sock.sendMessage(sender, {
+        text: success.locationReceived
+      });
       
     } else {
       // Other message types
@@ -839,7 +759,7 @@ async function handleMessage(sock, m) {
     });
     
     // Only send error message to whitelisted users
-    await sock.sendMessage(sender, { text: '❌ Terjadi kesalahan sistem' });
+    await sock.sendMessage(sender, { text: error.systemError });
   }
 }
 

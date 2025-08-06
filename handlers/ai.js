@@ -3,6 +3,12 @@ const { isGroupChat, isBroadcast, isPrivateChat } = require('../utils/chatUtils'
 const { messageStats, getStatsText } = require('../utils/messageStats');
 const { getUser, isAuthorized } = require('../services/userService');
 const { 
+  success, 
+  error, 
+  roleMessages, 
+  formatters 
+} = require('../utils/messages');
+const { 
   userHasPermission, 
   userCanUseCommand,
   userCanUseShortcut,
@@ -18,7 +24,7 @@ async function handleRoleBasedCommand(sock, sender, user, command, args) {
   // Check if user has role
   if (!user.role) {
     await sock.sendMessage(sender, { 
-      text: `❌ Anda belum memiliki role yang terdaftar.\n\nHubungi administrator untuk mendapatkan akses.`
+      text: roleMessages.noRole(userNumber)
     });
     return;
   }
@@ -27,7 +33,7 @@ async function handleRoleBasedCommand(sock, sender, user, command, args) {
   const canUse = await userCanUseCommand(user.id, `/${command}`);
   if (!canUse) {
     await sock.sendMessage(sender, { 
-      text: `❌ Command /${command} tidak tersedia untuk role ${user.role.emoji} ${user.role.display_name}\n\nKetik /help untuk melihat command yang tersedia.`
+      text: roleMessages.commandNotAvailable(command, user.role.emoji, user.role.display_name)
     });
     return;
   }
@@ -46,10 +52,6 @@ async function handleRoleBasedCommand(sock, sender, user, command, args) {
       await handleFinanceCommand(sock, sender, user, command, args);
       break;
       
-    case 'attendance':
-      await handleAttendanceCommand(sock, sender, userNumber, args);
-      break;
-      
     case 'cashier':
       await handleCashierCommand(sock, sender, user, command, args);
       break;
@@ -57,10 +59,8 @@ async function handleRoleBasedCommand(sock, sender, user, command, args) {
     case 'admin':
       // Admin can access all commands, route based on command type
       if (await userHasPermission(user.id, 'transactions') && 
-          ['saldo', 'bulan', 'kategori', 'chart', 'pie', 'compare', 'hapus', 'ocr'].includes(command)) {
+          ['saldo', 'bulan', 'kategori', 'chart', 'pie', 'compare', 'hapus'].includes(command)) {
         await handleFinanceCommand(sock, sender, user, command, args);
-      } else if (command === 'absen') {
-        await handleAttendanceCommand(sock, sender, userNumber, args);
       } else if (['jual', 'stok', 'laporan'].includes(command)) {
         await handleCashierCommand(sock, sender, user, command, args);
       } else {
@@ -70,7 +70,7 @@ async function handleRoleBasedCommand(sock, sender, user, command, args) {
       
     default:
       await sock.sendMessage(sender, { 
-        text: `❌ Role "${user.role.display_name}" tidak dikenali. Hubungi administrator.` 
+        text: roleMessages.roleUnknown(user.role.display_name)
       });
   }
 }
@@ -82,26 +82,21 @@ async function handleTextMessage(sock, sender, user, text) {
   // Check if user has role
   if (!user.role) {
     await sock.sendMessage(sender, { 
-      text: `❌ Anda belum memiliki role yang terdaftar.\n\nHubungi administrator untuk mendapatkan akses.\n\nNomor Anda: ${userNumber}`
+      text: roleMessages.noRole(userNumber)
     });
     return;
   }
   
   try {
-    // Existing OCR and attendance checks...
-    
     // Handle numbered quick commands with database role checking
-    if (/^[0-9]$/.test(text.trim()) && 
-        !OCRStateManager.isWaitingForConfirmation(userNumber) &&
-        !OCRStateManager.isWaitingForImage(userNumber) &&
-        !AttendanceStateManager.isInAttendanceMode(userNumber)) {
+    if (/^[0-9]$/.test(text.trim())) {
       
       const quickNumber = parseInt(text.trim());
       
       const canUse = await userCanUseQuickNumber(user.id, quickNumber);
       if (!canUse) {
         await sock.sendMessage(sender, { 
-          text: `❌ Quick command ${quickNumber} tidak tersedia untuk role ${user.role.emoji} ${user.role.display_name}` 
+          text: roleMessages.quickNumberNotAvailable(quickNumber, user.role.emoji, user.role.display_name)
         });
         return;
       }
@@ -116,17 +111,14 @@ async function handleTextMessage(sock, sender, user, text) {
     }
     
     // Handle shortcut commands with database role checking
-    if (/^[mtgjsl]\s+/.test(text.toLowerCase()) &&
-        !OCRStateManager.isWaitingForConfirmation(userNumber) &&
-        !OCRStateManager.isWaitingForImage(userNumber) &&
-        !AttendanceStateManager.isInAttendanceMode(userNumber)) {
+    if (/^[mtgjsl]\s+/.test(text.toLowerCase())) {
       
       const shortcut = text.toLowerCase().charAt(0);
       
       const canUse = await userCanUseShortcut(user.id, shortcut);
       if (!canUse) {
         await sock.sendMessage(sender, { 
-          text: `❌ Shortcut "${shortcut}" tidak tersedia untuk role ${user.role.emoji} ${user.role.display_name}` 
+          text: roleMessages.shortcutNotAvailable(shortcut, user.role.emoji, user.role.display_name)
         });
         return;
       }
@@ -159,7 +151,7 @@ async function handleTextMessage(sock, sender, user, text) {
       stack: error.stack
     });
     
-    await sock.sendMessage(sender, { text: '❌ Terjadi kesalahan sistem' });
+    await sock.sendMessage(sender, { text: error.systemError });
   }
 }
 
@@ -186,7 +178,7 @@ async function handleMessage(sock, m) {
     
     // Send info message for unregistered users
     await sock.sendMessage(sender, {
-      text: `👋 Selamat datang!\n\nAnda belum terdaftar dalam sistem.\nHubungi administrator untuk mendapatkan akses.\n\n📱 Nomor Anda: ${userNumber}`
+      text: roleMessages.unregisteredUser(userNumber)
     });
     return;
   }
@@ -202,7 +194,11 @@ async function handleMessage(sock, m) {
   
   // Welcome new users with role info
   if (user.role && !user.welcomed) {
-    const welcomeMsg = `👋 Selamat datang ${user.role.emoji} *${user.role.display_name}*!\n\n${user.role.description}\n\nKetik /help untuk panduan atau /menu untuk pilihan cepat.`;
+    const welcomeMsg = roleMessages.welcome(
+      user.role.emoji, 
+      user.role.display_name, 
+      user.role.description
+    );
     await sock.sendMessage(sender, { text: welcomeMsg });
     
     logger.info('User welcomed with role', { 
@@ -230,24 +226,16 @@ async function handleMessage(sock, m) {
       await handleTextMessage(sock, sender, user, text);
       
     } else if (message.message.imageMessage) {
-      // Handle image message with role checking
-      if (user.role && await userHasPermission(user.id, 'ocr')) {
-        // Existing OCR/attendance image handling...
-      } else {
-        await sock.sendMessage(sender, {
-          text: `📸 Foto diterima, tapi role ${user.role?.emoji} ${user.role?.display_name} tidak memiliki akses untuk memproses foto.`
-        });
-      }
+      // Handle image message - inform user about available features
+      await sock.sendMessage(sender, {
+        text: roleMessages.imageReceivedWithRole(user.role?.emoji, user.role?.display_name)
+      });
       
     } else if (message.message.locationMessage) {
-      // Handle location message with role checking
-      if (user.role && await userHasPermission(user.id, 'attendance')) {
-        // Existing attendance location handling...
-      } else {
-        await sock.sendMessage(sender, {
-          text: `📍 Lokasi diterima, tapi role ${user.role?.emoji} ${user.role?.display_name} tidak memiliki akses absensi.`
-        });
-      }
+      // Handle location message - inform user about available features
+      await sock.sendMessage(sender, {
+        text: roleMessages.locationReceivedWithRole(user.role?.emoji, user.role?.display_name)
+      });
       
     } else {
       // Other message types
@@ -268,7 +256,7 @@ async function handleMessage(sock, m) {
       stack: error.stack
     });
     
-    await sock.sendMessage(sender, { text: '❌ Terjadi kesalahan sistem' });
+    await sock.sendMessage(sender, { text: error.systemError });
   }
 }
 

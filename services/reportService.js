@@ -196,13 +196,7 @@ function generateQuickMenu() {
 9️⃣ Gaji (g [jumlah])
 0️⃣ Hapus Transaksi (/hapus)
 
-🏢 *ABSENSI CEPAT:*
-- /absen masuk - Langsung absen masuk
-- /absen pulang - Langsung absen pulang
-- /absen status - Cek status hari ini
-
 🔍 *LAINNYA:*
-/ocr - Scan foto struk
 /help - Panduan lengkap
 
 Ketik angka atau command langsung!`;
@@ -226,18 +220,7 @@ function getHelpText() {
 - /pie - Pie chart pengeluaran
 - /compare - Perbandingan 3 bulan
 
-🏢 *ABSENSI CEPAT:*
-- /absen masuk - Langsung absen masuk
-- /absen pulang - Langsung absen pulang
-- /absen status - Cek status hari ini
-- /absen rekap - Rekap bulanan
-- /absen - Menu lengkap
-
-📍 Radius valid: 300m dari kantor
-📸 Perlu foto selfie untuk konfirmasi
-
 🔍 *UTILITAS:*
-- /ocr - Scan struk belanja
 - /hapus [ID] - Hapus transaksi
 - /menu - Menu pilihan cepat
 - /stats - Statistik penggunaan

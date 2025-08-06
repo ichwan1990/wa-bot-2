@@ -1,61 +1,22 @@
+/**
+ * Contoh refactor adminHandler.js menggunakan sistem messages terpusat
+ * File ini menunjukkan bagaimana menggunakan utils/messages.js
+ */
+
 const { logger } = require('../config');
-const { adminMessages, error, success } = require('../utils/messages');
-const { 
-  getAllRoles, 
-  getUsersByRole, 
-  assignRoleToUser, 
-  removeRoleFromUser,
-  getRoleStatistics,
-  createRole
-} = require('../services/roleService');
 const { getUser } = require('../services/userService');
+const { adminMessages, error } = require('../utils/messages');
+const { 
+  getRoleByName, 
+  assignRoleToUser, 
+  removeRoleFromUser 
+} = require('../services/roleService');
 
-// Handle admin commands
-async function handleAdminCommand(sock, sender, user, command, args) {
-  const userNumber = sender.split('@')[0];
-  
-  switch (command.toLowerCase()) {
-    case 'help':
-      await sock.sendMessage(sender, { text: adminMessages.help });
-      break;
-      
-    case 'role':
-      await handleRoleManagement(sock, sender, user, args);
-      break;
-      
-    case 'users':
-      await handleUserManagement(sock, sender, user, args);
-      break;
-      
-    case 'stats':
-      await handleAdminStats(sock, sender, user);
-      break;
-      
-    default:
-      await sock.sendMessage(sender, { 
-        text: adminMessages.invalidSubCommand('assign, remove, stats')
-      });
-  }
-}
-
-// Handle role management
+// Handle role management - REFACTORED VERSION
 async function handleRoleManagement(sock, sender, user, args) {
   if (args.length === 0) {
-    // Show all roles
-    const roles = await getAllRoles();
-    let roleList = '👑 *DAFTAR ROLE*\n\n';
-    
-    roles.forEach(role => {
-      roleList += `${role.emoji} *${role.display_name}* (${role.name})\n`;
-      roleList += `   ${role.description}\n`;
-      roleList += `   Features: ${role.features.length}\n\n`;
-    });
-    
-    roleList += '\n💡 Commands:\n';
-    roleList += '• `/role assign [phone] [role_name]` - Assign role\n';
-    roleList += '• `/role remove [phone] [role_name]` - Remove role\n';
-    roleList += '• `/role stats` - Role statistics';
-    
+    // Show role information - this would use a dedicated template
+    const roleList = await generateRoleList(); // Function to generate role list
     await sock.sendMessage(sender, { text: roleList });
     return;
   }
@@ -66,7 +27,7 @@ async function handleRoleManagement(sock, sender, user, args) {
     case 'assign':
       if (args.length < 3) {
         await sock.sendMessage(sender, { 
-          text: adminMessages.formatError.roleAssign
+          text: adminMessages.formatError.roleAssign 
         });
         return;
       }
@@ -80,7 +41,7 @@ async function handleRoleManagement(sock, sender, user, args) {
     case 'remove':
       if (args.length < 3) {
         await sock.sendMessage(sender, { 
-          text: adminMessages.formatError.roleRemove
+          text: adminMessages.formatError.roleRemove 
         });
         return;
       }
@@ -97,16 +58,14 @@ async function handleRoleManagement(sock, sender, user, args) {
       
     default:
       await sock.sendMessage(sender, { 
-        text: adminMessages.invalidSubCommand('assign, remove, stats')
+        text: adminMessages.invalidSubCommand('assign, remove, atau stats')
       });
   }
 }
 
-// Assign role to user
+// Assign role to user - REFACTORED VERSION
 async function assignUserRole(sock, sender, adminUser, targetPhone, roleName) {
   try {
-    const { getRoleByName } = require('../services/roleService');
-    
     // Get role
     const role = await getRoleByName(roleName);
     if (!role) {
@@ -119,8 +78,9 @@ async function assignUserRole(sock, sender, adminUser, targetPhone, roleName) {
     // Get target user
     const targetUser = await getUser(targetPhone);
     if (!targetUser) {
+      const phoneDisplay = targetPhone.replace('@s.whatsapp.net', '');
       await sock.sendMessage(sender, { 
-        text: adminMessages.userNotFound(targetPhone.replace('@s.whatsapp.net', ''))
+        text: adminMessages.userNotFound(phoneDisplay)
       });
       return;
     }
@@ -129,8 +89,11 @@ async function assignUserRole(sock, sender, adminUser, targetPhone, roleName) {
     const result = await assignRoleToUser(targetUser.id, role.id, adminUser.id);
     
     if (result.success) {
+      const phoneDisplay = targetPhone.replace('@s.whatsapp.net', '');
+      
+      // Send success message to admin
       await sock.sendMessage(sender, { 
-        text: adminMessages.roleAssigned(role.emoji, role.display_name, targetPhone.replace('@s.whatsapp.net', ''))
+        text: adminMessages.roleAssigned(role.emoji, role.display_name, phoneDisplay)
       });
       
       // Notify target user
@@ -146,23 +109,25 @@ async function assignUserRole(sock, sender, adminUser, targetPhone, roleName) {
       });
     } else {
       await sock.sendMessage(sender, { 
-        text: adminMessages.roleAssignFailed(result.message) 
+        text: adminMessages.roleAssignFailed(result.message)
       });
     }
     
   } catch (error) {
-    logger.error('Error assigning role via admin', { error: error.message });
-    await sock.sendMessage(sender, { 
-      text: error.systemError
+    logger.error('Error assigning role', { 
+      adminId: adminUser.id, 
+      targetPhone, 
+      roleName,
+      error: error.message 
     });
+    
+    await sock.sendMessage(sender, { text: error.systemError });
   }
 }
 
-// Remove role from user
+// Remove role from user - REFACTORED VERSION
 async function removeUserRole(sock, sender, adminUser, targetPhone, roleName) {
   try {
-    const { getRoleByName } = require('../services/roleService');
-    
     // Get role
     const role = await getRoleByName(roleName);
     if (!role) {
@@ -175,8 +140,9 @@ async function removeUserRole(sock, sender, adminUser, targetPhone, roleName) {
     // Get target user
     const targetUser = await getUser(targetPhone);
     if (!targetUser) {
+      const phoneDisplay = targetPhone.replace('@s.whatsapp.net', '');
       await sock.sendMessage(sender, { 
-        text: adminMessages.userNotFound(targetPhone.replace('@s.whatsapp.net', ''))
+        text: adminMessages.userNotFound(phoneDisplay)
       });
       return;
     }
@@ -185,8 +151,11 @@ async function removeUserRole(sock, sender, adminUser, targetPhone, roleName) {
     const result = await removeRoleFromUser(targetUser.id, role.id, adminUser.id);
     
     if (result.success) {
+      const phoneDisplay = targetPhone.replace('@s.whatsapp.net', '');
+      
+      // Send success message to admin
       await sock.sendMessage(sender, { 
-        text: adminMessages.roleRemoved(role.emoji, role.display_name, targetPhone.replace('@s.whatsapp.net', ''))
+        text: adminMessages.roleRemoved(role.emoji, role.display_name, phoneDisplay)
       });
       
       // Notify target user
@@ -207,33 +176,19 @@ async function removeUserRole(sock, sender, adminUser, targetPhone, roleName) {
     }
     
   } catch (error) {
-    logger.error('Error removing role via admin', { error: error.message });
-    await sock.sendMessage(sender, { 
-      text: error.systemError
-    });
-  }
-}
-
-// Show role statistics
-async function showRoleStats(sock, sender) {
-  try {
-    const stats = await getRoleStatistics();
-    await sock.sendMessage(sender, { 
-      text: adminMessages.roleStatsGenerated(stats)
+    logger.error('Error removing role', { 
+      adminId: adminUser.id, 
+      targetPhone, 
+      roleName,
+      error: error.message 
     });
     
-  } catch (error) {
-    logger.error('Error getting role stats', { error: error.message });
-    await sock.sendMessage(sender, { 
-      text: adminMessages.roleStatsError
-    });
+    await sock.sendMessage(sender, { text: error.systemError });
   }
 }
 
 module.exports = {
-  handleAdminCommand,
   handleRoleManagement,
   assignUserRole,
-  removeUserRole,
-  showRoleStats
+  removeUserRole
 };

@@ -13,8 +13,7 @@ const messageStats = {
   commands: 0,
   transactions: 0,
   quickMenuUsage: 0,
-  chartsGenerated: 0,
-  ocrProcessed: 0  // Add OCR counter
+  chartsGenerated: 0
 };
 
 // Log stats every hour
@@ -33,7 +32,6 @@ function getStatsText() {
 💬 Commands: ${messageStats.commands}
 💰 Transactions: ${messageStats.transactions}
 📊 Charts Generated: ${messageStats.chartsGenerated}
-🔍 OCR Processed: ${messageStats.ocrProcessed}
 ⚡ Quick Menu Usage: ${messageStats.quickMenuUsage}
 
 🕐 Last Reset: Server restart`;

@@ -1,10 +1,44 @@
 const moment = require('moment');
 const { logger, fileLogger } = require('../config');
-const { getDB } = require('../database');
+const { getDB, updateUserBalance } = require('../database');
+const { formatCurrency } = require('../utils/formatter');
 
 // Parse transaction from message
 function parseTransaction(text) {
   text = text.toLowerCase().trim();
+  
+  // Detect payment method first
+  let paymentMethod = 'cash'; // default
+  
+  // Check for bank/transfer keywords
+  const bankKeywords = [
+    'transfer', 'tf', 'qris', 'qr', 'ovo', 'gopay', 'dana', 'shopeepay',
+    'mandiri', 'bca', 'bni', 'bri', 'debit', 'atm', 'online', 'digital',
+    'mobile banking', 'mbanking', 'internet banking', 'kartu kredit', 'cc'
+  ];
+  
+  // Check for cash keywords
+  const cashKeywords = [
+    'tunai', 'cash', 'uang cash', 'dompet', 'kantong'
+  ];
+  
+  // Check bank first (more specific)
+  for (const keyword of bankKeywords) {
+    if (text.includes(keyword)) {
+      paymentMethod = 'bank';
+      break;
+    }
+  }
+  
+  // If not bank, check for explicit cash keywords
+  if (paymentMethod !== 'bank') {
+    for (const keyword of cashKeywords) {
+      if (text.includes(keyword)) {
+        paymentMethod = 'cash';
+        break;
+      }
+    }
+  }
   
   // Extract amount (support for juta, ribu, ratus, puluh, currency symbols, and "k" for ribu)
   let amount = 0;
@@ -146,7 +180,8 @@ function parseTransaction(text) {
     type,
     amount,
     category,
-    description: text
+    description: text,
+    paymentMethod
   };
 }
 
@@ -154,8 +189,8 @@ function parseTransaction(text) {
 function addTransaction(userId, data) {
   return new Promise((resolve) => {
     const db = getDB();
-    const query = 'INSERT INTO transactions (user_id, type, amount, category, description, date) VALUES (?, ?, ?, ?, ?, ?)';
-    const values = [userId, data.type, data.amount, data.category, data.description, moment().format('YYYY-MM-DD')];
+    const query = 'INSERT INTO transactions (user_id, type, amount, category, description, payment_method, date) VALUES (?, ?, ?, ?, ?, ?, ?)';
+    const values = [userId, data.type, data.amount, data.category, data.description, data.paymentMethod || 'cash', moment().format('YYYY-MM-DD')];
     
     db.run(query, values, function(err) {
       if (err) {
@@ -163,30 +198,59 @@ function addTransaction(userId, data) {
           userId, 
           type: data.type, 
           amount: data.amount,
+          paymentMethod: data.paymentMethod,
           error: err.message 
         });
         resolve(null);
       } else {
         const transactionId = this.lastID;
-        logger.info('Transaction added', { 
-          transactionId, 
-          userId, 
-          type: data.type, 
-          amount: data.amount,
-          category: data.category
-        });
         
-        // Log to file for audit
-        fileLogger.info('transaction_created', {
-          id: transactionId,
-          userId,
-          type: data.type,
-          amount: data.amount,
-          category: data.category,
-          description: data.description
-        });
+        // Update user balance based on transaction type and payment method
+        let cashChange = 0;
+        let bankChange = 0;
         
-        resolve(transactionId);
+        if (data.paymentMethod === 'cash') {
+          cashChange = data.type === 'income' ? data.amount : -data.amount;
+        } else {
+          bankChange = data.type === 'income' ? data.amount : -data.amount;
+        }
+        
+        updateUserBalance(userId, cashChange, bankChange, (balanceErr) => {
+          if (balanceErr) {
+            logger.error('Error updating balance after transaction', { 
+              transactionId, 
+              userId, 
+              cashChange, 
+              bankChange, 
+              error: balanceErr.message 
+            });
+            // Continue anyway, transaction is already saved
+          }
+          
+          logger.info('Transaction added', { 
+            transactionId, 
+            userId, 
+            type: data.type, 
+            amount: data.amount,
+            category: data.category,
+            paymentMethod: data.paymentMethod,
+            cashChange,
+            bankChange
+          });
+          
+          // Log to file for audit
+          fileLogger.info('transaction_created', {
+            id: transactionId,
+            userId,
+            type: data.type,
+            amount: data.amount,
+            category: data.category,
+            description: data.description,
+            paymentMethod: data.paymentMethod
+          });
+          
+          resolve(transactionId);
+        });
       }
     });
   });
@@ -365,19 +429,86 @@ function getMonthlyComparisonData(userId) {
 function deleteTransaction(id, userId) {
   return new Promise((resolve) => {
     const db = getDB();
-    db.run('DELETE FROM transactions WHERE id = ? AND user_id = ?', [id, userId], function(err) {
+    
+    // First, get transaction details for balance reversal and user feedback
+    db.get('SELECT * FROM transactions WHERE id = ? AND user_id = ?', [id, userId], (err, transaction) => {
       if (err) {
-        logger.error('Error deleting transaction', { transactionId: id, userId, error: err.message });
-        resolve(false);
-      } else {
-        const deleted = this.changes > 0;
-        if (deleted) {
-          logger.info('Transaction deleted', { transactionId: id, userId });
-          fileLogger.info('transaction_deleted', { id, userId });
+        logger.error('Error fetching transaction for deletion', { transactionId: id, userId, error: err.message });
+        resolve({ success: false, error: 'Database error' });
+        return;
+      }
+      
+      if (!transaction) {
+        logger.warn('Transaction not found for deletion', { transactionId: id, userId });
+        resolve({ success: false, error: 'Transaction not found' });
+        return;
+      }
+      
+      // Delete the transaction
+      db.run('DELETE FROM transactions WHERE id = ? AND user_id = ?', [id, userId], function(err) {
+        if (err) {
+          logger.error('Error deleting transaction', { transactionId: id, userId, error: err.message });
+          resolve({ success: false, error: 'Failed to delete transaction' });
         } else {
-          logger.warn('Transaction not found for deletion', { transactionId: id, userId });
+          const deleted = this.changes > 0;
+          if (deleted) {
+            // Reverse the balance change
+            let cashChange = 0;
+            let bankChange = 0;
+            
+            if (transaction.payment_method === 'cash') {
+              cashChange = transaction.type === 'income' ? -transaction.amount : transaction.amount;
+            } else {
+              bankChange = transaction.type === 'income' ? -transaction.amount : transaction.amount;
+            }
+            
+            updateUserBalance(userId, cashChange, bankChange, (balanceErr) => {
+              if (balanceErr) {
+                logger.error('Error reversing balance after transaction deletion', { 
+                  transactionId: id, 
+                  userId, 
+                  error: balanceErr.message 
+                });
+                resolve({ success: false, error: 'Failed to update balance' });
+                return;
+              }
+              
+              logger.info('Transaction deleted', { transactionId: id, userId });
+              fileLogger.info('transaction_deleted', { id, userId });
+              
+              // Return success with transaction details
+              resolve({ 
+                success: true, 
+                transaction: {
+                  id: transaction.id,
+                  amount: formatCurrency(Math.abs(transaction.amount)),
+                  category: transaction.category || 'Lainnya',
+                  description: transaction.description,
+                  paymentMethod: transaction.payment_method === 'cash' ? '💵 Tunai' : '🏦 Rekening',
+                  date: new Date(transaction.created_at).toLocaleString('id-ID'),
+                  type: transaction.type
+                }
+              });
+            });
+          } else {
+            resolve({ success: false, error: 'Transaction not found' });
+          }
         }
-        resolve(deleted);
+      });
+    });
+  });
+}
+
+// Get user balance
+function getUserBalance(userId) {
+  return new Promise((resolve) => {
+    const { getUserBalance: getBalance } = require('../database');
+    getBalance(userId, (err, balance) => {
+      if (err) {
+        logger.error('Error getting user balance', { userId, error: err.message });
+        resolve({ cash: 0, bank: 0, total: 0 });
+      } else {
+        resolve(balance);
       }
     });
   });
@@ -391,5 +522,6 @@ module.exports = {
   getDailyData,
   getCategorySummary,
   getMonthlyComparisonData,
-  deleteTransaction
+  deleteTransaction,
+  getUserBalance
 };
